@@ -55,15 +55,15 @@ my $nestedtable = <<TABLE;
 TABLE
 
 my $test = new MediaWiki::Table;
-ok( defined $test, 'Object Creation - 1' );
-ok( $test->isa('MediaWiki::Table'), 'Object Creation - 2' );
+ok( defined $test, 'Object Creation - Defined' );
+ok( $test, 'Object Creation - Is True');
+ok( $test->isa('MediaWiki::Table'), 'Object Creation - Class' );
 
-ok( defined $test->style(), 'Object Creation - 3' );
-ok( defined $test->border(), 'Object Creation - 4' );
-ok( defined $test->class(), 'Object Creation - 5' );
-ok( defined $test->rows(), 'Object Creation - 6' );
-ok( defined $test->headers(), 'Object Creation - 7' );
-
+ok( defined $test->style(), 'Object Creation - Style' );
+ok( defined $test->border(), 'Object Creation - Border' );
+ok( defined $test->class(), 'Object Creation - Class' );
+ok( defined $test->rows(), 'Object Creation - Rows' );
+ok( defined $test->headers(), 'Object Creation - Headers' );
 
 is(
 new MediaWiki::Table(
