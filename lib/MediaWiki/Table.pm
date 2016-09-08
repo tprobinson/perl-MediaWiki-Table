@@ -10,6 +10,9 @@ $VERSION = eval $VERSION;
 # Support stringification and comparison
 use overload
   fallback => 1,
+  # Don't stringify when only doing boolean tests, since stringification can
+  # be expensive for large tables:
+  bool => sub { return 1; },
   '""' => 'stringify';
 
 use Carp;
@@ -155,7 +158,12 @@ sub border {
   { $param = $$param; }
 
   if( ! defined _NUMBER( $param ) )
-  { carp("Method border only accepts a number."); }
+  {
+    if( ! $param )
+    { $param = undef; }
+    else
+    { carp("Method border only accepts a number."); }
+  }
 
   $self->{'border'} = $param;
 
@@ -175,7 +183,12 @@ sub class {
   { $param = $$param; }
 
   if( ! _STRING( $param ) )
-  { carp("Method class only accepts a string."); }
+  {
+    if( ! $param )
+    { $param = undef; }
+    else
+    { carp("Method class only accepts a string."); }
+  }
 
   $self->{'class'} = $param;
 
@@ -334,9 +347,15 @@ sub whowasi { ( caller(2) )[3] }
 =head1 SYNOPSIS
 
   use MediaWiki::Table;
+  my @headers = ('ID','Name','Favorite Color');
+  my @rows = (
+    ['0','Lancelot','Blue')],
+    ['1','Galahad','<strike>Blue</strike>Yellow'],
+    ['2','Robin',q(''unknown'')],
+    ['3','Arthur',"unknown\nbut maybe\ngreen"],
+  );
 
-  # Simple style
-  print new MediaWiki::Table(
+  my @alldata = (
     ['ID','Name','Favorite Color'],
     ['0','Lancelot','Blue')],
     ['1','Galahad','<strike>Blue</strike>Yellow'],
@@ -344,39 +363,17 @@ sub whowasi { ( caller(2) )[3] }
     ['3','Arthur',"unknown\nbut maybe\ngreen"],
   );
 
+  # Simple style
+  print new MediaWiki::Table(@alldata);
+
   # Text::Table::Tiny style
-  my $table = new MediaWiki::Table({
-    'header_row' => 1,
-    'rows' => [
-      ['ID','Name','Favorite Color'],
-      ['0','Lancelot','Blue')],
-      ['1','Galahad','<strike>Blue</strike>Yellow'],
-      ['2','Robin',q(''unknown'')],
-      ['3','Arthur',"unknown\nbut maybe\ngreen"],
-    ]
-  );
-  print $table;
+  print new MediaWiki::Table({'header_row' => 1, 'rows' => \@alldata });
 
   # Text::Table style
-  my $table = new MediaWiki::Table(
-    'ID','Name','Favorite Color',
-  )->load(
-    ['0','Lancelot','Blue')],
-    ['1','Galahad','<strike>Blue</strike>Yellow'],
-    ['2','Robin',q(''unknown'')],
-    ['3','Arthur',"unknown\nbut maybe\ngreen"],
-  );
-  print $table;
+  print new MediaWiki::Table( 'ID','Name','Favorite Color' )->load(@alldata);
 
   # Super OO-style
-  print new MediaWiki::Table()
-  ->headers('ID','Name','Favorite Color')
-  ->rows(
-    ['0','Lancelot','Blue')],
-    ['1','Galahad','<strike>Blue</strike>Yellow'],
-    ['2','Robin',q(''unknown'')],
-    ['3','Arthur',"unknown\nbut maybe\ngreen"],
-  );
+  print new MediaWiki::Table()->headers(@headers)->rows(@rows);
 
   # All will produce this result:
   # {| class="wikitable" border="1" style="text-align: center"
@@ -396,21 +393,43 @@ sub whowasi { ( caller(2) )[3] }
   # |-
   # |}
 
+  # Tables may be nested. This gives two tables next to each other, in a parent table with minimal styling.
+  # When nesting tables, it's best to remove style and border of the child tables: $t->style('')->border(0)
+  new MediaWiki::Table({
+    'rows' => [
+      [
+        new MediaWiki::Table(
+          ['table','on'],
+          ['left','side'],
+        )->style('')->border(0),
+        new MediaWiki::Table(
+          ['table','on'],
+          ['right','side'],
+        )->style('')->border(0),
+      ],
+    ],
+  });
+
 =head1 Constructor
+
 =method new()
+
 Creates a MediaWiki::Table item. This can accept either an array or a hash.
 
 If it is given an array of arrays, it assumes the first row is headers, and the rest are rows:
+
   new MediaWiki::Table(
     ['header1','header2','header3'],
     ['data1','data2','data3'],
   );
 
 If just a array, it assumes you are using a Text::Table style construction:
+
   new MediaWiki::Table('header1','header2','header3')
     ->load(['data1','data2','data3']);
 
 If it is given a hash, it can accept multiple styles of construction, such as Text::Table::Tiny style:
+
   new MediaWiki::Table({
     header_row => 1,
     rows => [
@@ -420,12 +439,14 @@ If it is given a hash, it can accept multiple styles of construction, such as Te
   });
 
 Alternately, using headers:
+
   new MediaWiki::Table({
     headers => ['header1','header2','header3']
     rows => [['data1','data2','data3']],
   });
 
 Or, for maximum object-orientation, you can return an empty object and add to it later:
+
   new MediaWiki::Table()
   ->headers('header1','header2','header3')
   ->rows(
@@ -435,23 +456,88 @@ Or, for maximum object-orientation, you can return an empty object and add to it
     ['3','Arthur',"unknown\nbut maybe\ngreen"],
   );
 
-All data and style methods in this package are also supported as constructor parameters.
+=head1 Methods
 
-=head1 Data Methods
-=method headers
-=method rows
-=method header_row
+All data and style methods in this package have the following features:
 
-=head1 Style Methods
-=method caption
+=over 4
+
+=item * Supported as a constructor hash key
+
+=item * Can be called with zero arguments to get the value
+
+=item * Can be called with a matching-type argument to set the value
+
+=item * Can be called with a falsy value (probably C<''>) to delete the value
+
+=back
+
+=head2 Data Methods
+
+=over 4
+
+=item * C<headers>: accepts array
+
+=item * C<rows>: accepts array of arrays
+
+=back
+
+=head2 Style Methods
+
+These methods modify the style of the table somehow.
+
+=over 4
+
+=item * C<caption>: accepts string
+
+=item * C<style>: accepts valid CSS style
+
+=item * C<class>: accepts string
+
+=item * C<border>: accepts number
+
+=back
+
+Special information about the C<style> method:
+
 =method style
-=method class
-=method border
 
-=head1 Printing Methods
-=method stringify
-Blah blah
-=method generate_table
-An alias of 'stringify'
-=method table
-An alias of 'stringify'
+The style parameter is internally stored as a CSS::DOM::Style object, and will be returned as one.
+
+  # returns the existing style as CSS::DOM::Style
+  $tab->style();
+
+  # replaces any existing style in the table
+  $tab->style('width: 50%; height: 250px; overflow: scroll-y'); # via parse
+  $tab->style(CSS::DOM::Style::parse(' text-decoration: none ')); # or via your own object
+
+  # edits the style by using CSS::DOM::Style methods
+  $tab->style()->setProperty('color' => 'green');
+
+  # removes the style entirely
+  $tab->style('');
+
+=head2 Printing Methods
+
+These methods return the table as a string and are interchangeable.
+The table can be included into a string or compared using 'cmp' as if it were a normal string, so you don't really need to use these unless you really like Text::Table or Text::Table::Tiny.
+
+=over 4
+
+=item * C<stringify>
+
+=item * C<generate_table>
+
+=item * C<table>
+
+=back
+
+=head1 See Also
+
+L<Text::Table>
+
+L<Text::Table::Tiny>
+
+L<MediaWiki::Table::Tiny>
+
+L<CSS::DOM::Style>
